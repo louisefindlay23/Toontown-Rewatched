@@ -62,6 +62,24 @@ final class SiriIntentTests: XCTestCase {
         let law = try await query.entities(matching: "highest Lawbot percentage in Daisy Gardens")
         XCTAssertEqual(law.map(\.id), ["daisyGardens-lawbot"])
 
+        let ambiguousCog = try await query.entities(matching: "which street has the highest passport percentage in toon town central")
+        XCTAssertTrue(ambiguousCog.isEmpty)
+
+        let splitCashbot = try await query.entities(matching: "which street has the highest cash-back percentage in town central")
+        XCTAssertEqual(splitCashbot.map(\.id), ["toontownCentral-cashbot"])
+
+        let fullMishearing = try await query.entities(matching: "i found this on the web for which street has the highest pass-port percentage in town town central with ttr re-watched")
+        XCTAssertTrue(fullMishearing.isEmpty)
+
+        let bossbot = try await query.entities(matching: "best street in toontown central for bossbot")
+        XCTAssertEqual(bossbot.map(\.id), ["toontownCentral-bossbot"])
+
+        if #available(watchOS 10.0, *) {
+            let synonyms = CogStreetQuestion.all.first { $0.id == "toontownCentral-cashbot" }!
+                .displayRepresentation.synonyms.map { String(localized: $0) }
+            XCTAssertTrue(synonyms.contains("Town Central for Cash board"))
+        }
+
         let unsupportedPhrase = try await query.entities(matching: "best coke street")
         XCTAssertTrue(unsupportedPhrase.isEmpty)
         let unsupportedIdentifier = try await query.entities(for: ["unsupported-playground-cog"])
@@ -72,6 +90,12 @@ final class SiriIntentTests: XCTestCase {
         let intent = BestStreetIntent()
         intent.question = CogStreetQuestion(id: "toontownCentral-cashbot", playground: .toontownCentral, cog: .cashbot)
         XCTAssertEqual(intent.spokenResponse(), "Punchline Place has the highest Cashbot percentage in Toontown Central, at 40 percent.")
+    }
+
+    func testBossbotResponseForToontownCentral() {
+        let intent = BestStreetIntent()
+        intent.question = CogStreetQuestion(id: "toontownCentral-bossbot", playground: .toontownCentral, cog: .bossbot)
+        XCTAssertEqual(intent.spokenResponse(), "Silly Street has the highest Bossbot percentage in Toontown Central, at 25 percent.")
     }
 
     func testIntentPerformExecutesProductionResponsePath() async throws {

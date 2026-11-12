@@ -1,4 +1,7 @@
 import AppIntents
+import OSLog
+
+private let siriIntentLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TTR-Rewatched", category: "SiriIntent")
 
 // The watch UI and Siri share this catalog as their only source of street data.
 struct Neighborhood: Identifiable {
@@ -64,7 +67,7 @@ enum CogType: String, AppEnum {
         switch self {
         case .bossbot: ["Bossbot", "Bossbots", "Boss bot", "Boss bots"]
         case .lawbot: ["Lawbot", "Lawbots", "Law bot", "Law bots"]
-        case .cashbot: ["Cashbot", "Cashbots", "Cash bot", "Cash bots", "Cash board", "Cash ball", "Cash balls", "Cash box", "Cash boxes"]
+        case .cashbot: ["Cashbot", "Cashbots", "Cash bot", "Cash bots", "Cash board", "Cash ball", "Cash balls", "Cash box", "Cash boxes", "cash-back"]
         case .sellbot: ["Sellbot", "Sellbots", "Sell bot", "Sell bots"]
         }
     }
@@ -99,7 +102,7 @@ enum Playground: String, AppEnum {
     }
     var spokenAliases: [String] {
         switch self {
-        case .toontownCentral: ["Town Central", "Toon Town Central"]
+        case .toontownCentral: ["Town Central", "Toon Town Central", "Town Town Central"]
         case .donaldsDock: ["Donald's Dock"]
         case .daisyGardens: ["Daisy Gardens"]
         case .minniesMelodyland: ["Minnie's Melodyland"]
@@ -117,7 +120,15 @@ struct CogStreetQuestion: AppEntity {
     let cog: CogType
 
     var displayRepresentation: DisplayRepresentation {
-        DisplayRepresentation(title: "\(playground.neighborhoodName) for \(cog.spokenName)")
+        let title: LocalizedStringResource = "\(playground.neighborhoodName) for \(cog.spokenName)"
+        if #available(watchOS 10.0, *) {
+            let playgroundNames = [playground.neighborhoodName] + playground.spokenAliases
+            let synonyms: [LocalizedStringResource] = playgroundNames.flatMap { place in
+                cog.spokenAliases.map { "\(place) for \($0)" }
+            }
+            return DisplayRepresentation(title: title, synonyms: synonyms)
+        }
+        return DisplayRepresentation(title: title)
     }
     static var all: [CogStreetQuestion] {
         Playground.allCases.flatMap { place in
@@ -135,12 +146,15 @@ struct CogStreetQuestionQuery: EntityStringQuery {
     func suggestedEntities() async throws -> [CogStreetQuestion] { CogStreetQuestion.all }
     func entities(matching string: String) async throws -> [CogStreetQuestion] {
         let query = string.localizedLowercase
-        return CogStreetQuestion.all.filter { question in
+        let matches = CogStreetQuestion.all.filter { question in
             let placeMatches = question.playground.spokenAliases.contains { query.contains($0.localizedLowercase) }
                 || query.contains(question.playground.neighborhoodName.localizedLowercase)
             let cogMatches = question.cog.spokenAliases.contains { query.contains($0.localizedLowercase) }
             return placeMatches && cogMatches
         }
+        siriIntentLogger.notice("Entity lookup matched: \(matches.map(\.id).joined(separator: ", "), privacy: .public)")
+        UserDefaults.standard.set(matches.map(\.id).joined(separator: ", "), forKey: "latestSiriEntityMatches")
+        return matches
     }
 }
 
@@ -174,8 +188,14 @@ struct BestStreetIntent: AppIntent {
         return "\(names) \(verb) the highest \(question.cog.spokenName) percentage in \(question.playground.neighborhoodName), at \(ranking.percentage) percent."
     }
 
-    func perform() async throws -> some IntentResult {
-        .result(dialog: IntentDialog(stringLiteral: spokenResponse()))
+    func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
+        siriIntentLogger.notice("BestStreetIntent invoked with question: \(question.id, privacy: .public)")
+        UserDefaults.standard.set(question.id, forKey: "latestSiriIntentQuestion")
+        let response = spokenResponse()
+        siriIntentLogger.notice("BestStreetIntent returned: \(response, privacy: .public)")
+        UserDefaults.standard.set(response, forKey: "latestSiriIntentAnswer")
+        let dialog = IntentDialog(full: "\(response)", supporting: "\(response)")
+        return .result(value: response, dialog: dialog)
     }
 }
 
@@ -187,6 +207,8 @@ struct TTRAppShortcuts: AppShortcutsProvider {
                 "Find the best cog street with \(.applicationName)",
                 "Find the best coke street with \(.applicationName)",
                 "Ask \(.applicationName) for the best cog street",
+                "Ask \(.applicationName) for the best coke street",
+                "Ask \(.applicationName) for the best coke street in \(\.$question)",
                 "What's the best street in \(\.$question) in \(.applicationName)",
                 "What's the best street in \(\.$question) and \(.applicationName)",
                 "Which street has the highest cog percentage for \(\.$question) in \(.applicationName)"
