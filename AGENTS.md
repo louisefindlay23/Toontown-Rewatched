@@ -23,3 +23,9 @@ This is a watchOS-only app. I'm new to Swift and Xcode, so explain unfamiliar co
 
 ## Definition of Done
 Changes must preserve existing functionality, comply with the actual watchOS target and deployment version, and be tested as far as the available environment permits.
+
+## Building and running (MobileBuildMCP)
+- Use the MobileBuildMCP CLI (formerly XcodeBuildMCP) instead of raw `xcodebuild`; its output is compact. No global install: `npx -y mobilebuildmcp@latest <workflow> <command>`.
+- Build (verified): `npx -y mobilebuildmcp@latest simulator build --project-path "TTR Rewatched.xcodeproj" --scheme "TTR Rewatched Watch App" --simulator-id F50D2AB3-3583-4689-A628-4461EC2F9FE9` (an Apple Watch SE 3 44mm, watchOS 27.0 simulator; list others with `simulator list`). Use `simulator build-and-run` to launch it too (build-and-run itself not yet verified).
+- For simulator UI driving (tap, swipe, screenshots) keep using T3's device tools / `agent-device`; the CLI's UI automation was flaky in testing. Run `agent-device` from the same working directory the session was opened in, or it fails with `DEVICE_IN_USE`.
+- When finished verifying, clean up what you started: close the Device Hub session with `device_close`, then stop the simulator (T3 Device panel stop, or `xcrun simctl shutdown F50D2AB3-3583-4689-A628-4461EC2F9FE9`). Leave it running if the user is still looking at it. Only quit Xcode if you opened it; never quit one the user is using.
